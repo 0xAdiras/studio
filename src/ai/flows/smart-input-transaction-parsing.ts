@@ -17,14 +17,14 @@ const ParsedTransactionInputSchema = z.object({
 export type ParsedTransactionInput = z.infer<typeof ParsedTransactionInputSchema>;
 
 const ParsedTransactionOutputSchema = z.object({
-  amount: z.number().describe('The total amount of the transaction in Indian Rupees.'),
-  category: z.string().describe('The category of the transaction (e.g., Food, Travel, Bills).'),
-  merchant: z.string().describe('The merchant associated with the transaction (e.g., Zomato, McDonalds).'),
-  people: z.array(z.string()).describe('An array of people involved in the transaction.'),
+  amount: z.number().positive().describe('The total amount of the transaction in Indian Rupees. Must be a positive number.'),
+  category: z.string().min(1).describe('The category of the transaction (e.g., Food, Travel, Bills, Entertainment, Shopping, Other).'),
+  merchant: z.string().min(1).describe('The merchant associated with the transaction (e.g., Zomato, McDonalds, Uber). Use "Unknown" if not specified.'),
+  people: z.array(z.string()).default([]).describe('An array of people involved in the transaction. Include "me" if the user is involved. Use empty array if no people are mentioned.'),
   splitDetails: z
     .record(z.string(), z.number())
     .optional()
-    .describe('Optional: Details of how the transaction was split among people, if applicable.'),
+    .describe('Optional: Details of how the transaction was split among people, if applicable. Keys are person names, values are amounts owed.'),
 });
 export type ParsedTransactionOutput = z.infer<typeof ParsedTransactionOutputSchema>;
 
@@ -36,9 +36,21 @@ const prompt = ai.definePrompt({
   name: 'parseTransactionPrompt',
   input: {schema: ParsedTransactionInputSchema},
   output: {schema: ParsedTransactionOutputSchema},
-  prompt: `You are a financial parser. Extract: Amount, Category, Merchant, and People involved. If multiple people are mentioned, calculate the split. Return JSON only.
+  prompt: `You are a financial transaction parser. Parse the transaction and extract the following details:
 
-Transaction: {{input}}`,
+1. **amount**: The total transaction amount in Indian Rupees (positive number only)
+2. **category**: The transaction category (Food, Travel, Bills, Entertainment, Shopping, or Other)
+3. **merchant**: The merchant name (use "Unknown" if not specified)
+4. **people**: Array of people involved (include "me" for the user, use empty array if none mentioned)
+5. **splitDetails**: If the transaction is split among multiple people, provide an object mapping person names to their amounts. Otherwise, omit this field.
+
+Important:
+- Always provide all required fields (amount, category, merchant, people)
+- Amount must be a positive number
+- Category and merchant must be non-empty strings
+- If you cannot determine a value, use sensible defaults (e.g., category: "Other", merchant: "Unknown")
+
+Transaction input: {{input}}`,
 });
 
 const parseTransactionFlow = ai.defineFlow(
@@ -49,6 +61,19 @@ const parseTransactionFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await prompt(input);
-    return output!;
+    
+    if (!output) {
+      throw new Error('AI did not return a valid response. Please try rephrasing your input.');
+    }
+    
+    // Validate the output matches our schema using safeParse for better error handling
+    const validationResult = ParsedTransactionOutputSchema.safeParse(output);
+    
+    if (!validationResult.success) {
+      const errors = validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+      throw new Error(`Invalid AI response: ${errors}`);
+    }
+    
+    return validationResult.data;
   }
 );
