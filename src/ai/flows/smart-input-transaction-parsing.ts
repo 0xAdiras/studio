@@ -66,8 +66,14 @@ const parseTransactionFlow = ai.defineFlow(
       throw new Error('AI did not return a valid response. Please try rephrasing your input.');
     }
     
-    // Validate the output matches our schema
-    const validated = ParsedTransactionOutputSchema.parse(output);
-    return validated;
+    // Validate the output matches our schema using safeParse for better error handling
+    const validationResult = ParsedTransactionOutputSchema.safeParse(output);
+    
+    if (!validationResult.success) {
+      const errors = validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+      throw new Error(`Invalid AI response: ${errors}`);
+    }
+    
+    return validationResult.data;
   }
 );
