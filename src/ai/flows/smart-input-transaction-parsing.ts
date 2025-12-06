@@ -38,7 +38,7 @@ const prompt = ai.definePrompt({
   output: {schema: ParsedTransactionOutputSchema},
   prompt: `You are a financial parser. Extract: Amount, Category, Merchant, and People involved. If multiple people are mentioned, calculate the split. Return JSON only.
 
-Transaction: {{{input}}}`,
+Transaction: {{input}}`,
 });
 
 const parseTransactionFlow = ai.defineFlow(
