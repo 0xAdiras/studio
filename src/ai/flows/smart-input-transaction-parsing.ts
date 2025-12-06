@@ -11,27 +11,34 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-const ParsedTransactionInputSchema = z.string().describe('Natural language input describing a transaction.');
+const ParsedTransactionInputSchema = z.object({
+  input: z.string().describe('The natural language transaction input from the user.'),
+});
 export type ParsedTransactionInput = z.infer<typeof ParsedTransactionInputSchema>;
 
 const ParsedTransactionOutputSchema = z.object({
-  amount: z.number().describe('The amount of the transaction in Indian Rupees.'),
+  amount: z.number().describe('The total amount of the transaction in Indian Rupees.'),
   category: z.string().describe('The category of the transaction (e.g., Food, Travel, Bills).'),
   merchant: z.string().describe('The merchant associated with the transaction (e.g., Zomato, McDonalds).'),
   people: z.array(z.string()).describe('An array of people involved in the transaction.'),
-  splitDetails: z.record(z.string(), z.number()).optional().describe('Optional: Details of how the transaction was split among people, if applicable.'),
+  splitDetails: z
+    .record(z.string(), z.number())
+    .optional()
+    .describe('Optional: Details of how the transaction was split among people, if applicable.'),
 });
 export type ParsedTransactionOutput = z.infer<typeof ParsedTransactionOutputSchema>;
 
-export async function parseTransaction(input: ParsedTransactionInput): Promise<ParsedTransactionOutput> {
-  return parseTransactionFlow(input);
+export async function parseTransaction(input: string): Promise<ParsedTransactionOutput> {
+  return parseTransactionFlow({input});
 }
 
 const prompt = ai.definePrompt({
   name: 'parseTransactionPrompt',
   input: {schema: ParsedTransactionInputSchema},
   output: {schema: ParsedTransactionOutputSchema},
-  prompt: `You are a financial parser. Extract: Amount, Category, Merchant, and People involved. If multiple people are mentioned, calculate the split. Return JSON only.\n\nTransaction: {{{$input}}}`,
+  prompt: `You are a financial parser. Extract: Amount, Category, Merchant, and People involved. If multiple people are mentioned, calculate the split. Return JSON only.
+
+Transaction: {{{input}}}`,
 });
 
 const parseTransactionFlow = ai.defineFlow(
